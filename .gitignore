@@ -1,0 +1,25 @@
+# Ignorar arquivos
+cache_traducoes.json
+arquivo_entrada.csv
+arquivo_entrada.xlsx
+
+# Ignorar diretórios padrão de ambiente virtual do Python
+_pycache_/
+venv/
+env/
+
+# Ignorar arquivos de configuração específicos da IDE
+.vscode/
+.idea/
+
+# Ignorar arquivos temporários e logs
+*.log
+*.tmp
+
+# Ignorar arquivos de compilação do Python
+*.pyc
+*.pyo
+
+# Ignorar arquivos do sistema operacional
+.DS_Store
+Thumbs.db
