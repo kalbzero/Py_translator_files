@@ -34,7 +34,7 @@ def traduzir_texto(texto):
     tentativas = 3
     for _ in range(tentativas):
         try:
-            # Remover tags HTML
+            # Remover tags HTML e obter o texto limpo
             soup = BeautifulSoup(texto_sem_pontovirgula, "html.parser")
             texto_limpo = soup.get_text()
 
@@ -42,18 +42,18 @@ def traduzir_texto(texto):
             traducao = tradutor.translate(texto_limpo, src='es', dest='pt').text
 
             # Restaurar as tags HTML no texto traduzido
-            for original, traduzido in zip(soup.stripped_strings, traducao.split()):
-                texto_sem_pontovirgula = texto_sem_pontovirgula.replace(original, traduzido)
+            traducao_html = BeautifulSoup(traducao, "html.parser").prettify()
+            texto_traduzido = traducao_html
 
-            # Restaurar ponto e vírgula se necessário
-            texto_traduzido = texto_sem_pontovirgula.replace(' ', ';')
-
+            # Armazenar a tradução no cache
             cache_traducoes[texto.strip()] = texto_traduzido
             return texto_traduzido
         except Exception as e:
             print(f"Erro ao tentar traduzir '{texto}': {e}")
+            # Verifica se a mensagem de erro indica o limite de traduções
             if "AVAILABLE FREE TRANSLATIONS" in str(e):
                 print("Limite de traduções atingido. Encerrando o programa.")
+                salvar_cache()
                 exit(1)
             time.sleep(5)  # Espera antes de tentar novamente
 
@@ -70,25 +70,25 @@ def traduzir_arquivo_xlsx(nome_arquivo):
 
         # Coleta os textos para traduzir
         textos_para_traduzir = []
+        textos_original = {}  # Mapeia os textos originais para suas células
+
         for row in sheet.iter_rows():
             for cell in row:
                 if cell.value and isinstance(cell.value, str):
-                    textos_para_traduzir.append(cell.value)
+                    if cell.value not in textos_original:
+                        textos_original[cell.value] = cell
+                        textos_para_traduzir.append(cell.value)
 
         # Tradução dos textos
-        textos_traduzidos = []
+        textos_traduzidos = {}
         for texto in tqdm(textos_para_traduzir, desc="Traduzindo textos"):
-            textos_traduzidos.append(traduzir_texto(texto))
+            traduzido = traduzir_texto(texto)
+            textos_traduzidos[texto] = traduzido
 
-        # Substitui as células com os textos traduzidos
-        indice_traduzido = 0
-        for row in sheet.iter_rows():
-            for cell in row:
-                if cell.value and isinstance(cell.value, str):
-                    cell.value = textos_traduzidos[indice_traduzido]
-                    indice_traduzido += 1
+        for texto_original, texto_traduzido in textos_traduzidos.items():
+            if texto_original in textos_original:
+                textos_original[texto_original].value = texto_traduzido
 
-        # Salva o arquivo traduzido
         nome_base, extensao = os.path.splitext(nome_arquivo)
         novo_nome = f"{nome_base}_pt.xlsx"
         workbook.save(novo_nome)
@@ -105,7 +105,7 @@ def traduzir_arquivo_xlsx(nome_arquivo):
         workbook.save(novo_nome)
         print(f"Progresso salvo no arquivo: {novo_nome}")
         print(f"Total de traduções únicas: {len(cache_traducoes)}")
-        raise  # Relevanta a exceção para encerrar o programa
+        raise
 
 # Traduzir o arquivo XLSX
 arquivo_para_traduzir = 'arquivo_entrada.xlsx'
