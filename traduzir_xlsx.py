@@ -5,6 +5,7 @@ import json
 import os
 import time
 from bs4 import BeautifulSoup
+import re
 
 # Inicializa o tradutor e o cache
 tradutor = Translator()
@@ -12,15 +13,28 @@ cache_traducoes = {}
 cache_arquivo = 'cache_traducoes.json'
 
 def salvar_cache():
+    """Salva o cache de traduções em um arquivo JSON."""
     with open(cache_arquivo, 'w', encoding='utf-8') as f:
         json.dump(cache_traducoes, f, ensure_ascii=False, indent=4)
 
+def carregar_cache():
+    """Carrega o cache de traduções do arquivo JSON."""
+    if os.path.exists(cache_arquivo):
+        with open(cache_arquivo, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
 def is_number(texto):
-    # Remove todos os pontos, vírgulas e traços
+    """Verifica se o texto é um número, removendo pontos, vírgulas e traços."""
     texto_limpo = texto.replace('.', '').replace(',', '').replace('-', '')
     return texto_limpo.isdigit()
 
+def contains_html(texto):
+    """Verifica se o texto contém tags HTML básicas."""
+    return bool(re.search(r'<[a-z][\s\S]*>', texto))
+
 def traduzir_texto(texto):
+    """Traduz o texto para o português, utilizando cache para evitar traduções repetidas."""
     if texto.strip() in cache_traducoes:
         return cache_traducoes[texto.strip()]
 
@@ -34,23 +48,26 @@ def traduzir_texto(texto):
     tentativas = 3
     for _ in range(tentativas):
         try:
-            # Remover tags HTML e obter o texto limpo
-            soup = BeautifulSoup(texto_sem_pontovirgula, "html.parser")
-            texto_limpo = soup.get_text()
+            # Remover tags HTML se o texto contiver HTML
+            if contains_html(texto_sem_pontovirgula):
+                soup = BeautifulSoup(texto_sem_pontovirgula, "html.parser")
+                texto_limpo = soup.get_text()
+            else:
+                texto_limpo = texto_sem_pontovirgula
 
             # Traduzir o texto limpo
             traducao = tradutor.translate(texto_limpo, src='es', dest='pt').text
 
-            # Restaurar as tags HTML no texto traduzido
-            traducao_html = BeautifulSoup(traducao, "html.parser").prettify()
-            texto_traduzido = traducao_html
+            # Restaurar as tags HTML no texto traduzido, se necessário
+            texto_traduzido = traducao
+            if contains_html(texto):
+                texto_traduzido = f"<html>{texto_traduzido}</html>"
 
             # Armazenar a tradução no cache
             cache_traducoes[texto.strip()] = texto_traduzido
             return texto_traduzido
         except Exception as e:
             print(f"Erro ao tentar traduzir '{texto}': {e}")
-            # Verifica se a mensagem de erro indica o limite de traduções
             if "AVAILABLE FREE TRANSLATIONS" in str(e):
                 print("Limite de traduções atingido. Encerrando o programa.")
                 salvar_cache()
@@ -61,34 +78,25 @@ def traduzir_texto(texto):
     return texto
 
 def traduzir_arquivo_xlsx(nome_arquivo):
+    """Traduz o conteúdo de um arquivo XLSX e salva a tradução em um novo arquivo."""
     print(f"Iniciando tradução do arquivo: {nome_arquivo}")
 
     try:
+        # Carrega o cache de traduções
+        global cache_traducoes
+        cache_traducoes = carregar_cache()
+
         # Carrega o arquivo XLSX
         workbook = openpyxl.load_workbook(nome_arquivo)
         sheet = workbook.active
 
-        # Coleta os textos para traduzir
-        textos_para_traduzir = []
-        textos_original = {}  # Mapeia os textos originais para suas células
-
-        for row in sheet.iter_rows():
+        # Tradução dos textos
+        for row in tqdm(sheet.iter_rows(), desc="Traduzindo textos"):
             for cell in row:
                 if cell.value and isinstance(cell.value, str):
-                    if cell.value not in textos_original:
-                        textos_original[cell.value] = cell
-                        textos_para_traduzir.append(cell.value)
+                    cell.value = traduzir_texto(cell.value)
 
-        # Tradução dos textos
-        textos_traduzidos = {}
-        for texto in tqdm(textos_para_traduzir, desc="Traduzindo textos"):
-            traduzido = traduzir_texto(texto)
-            textos_traduzidos[texto] = traduzido
-
-        for texto_original, texto_traduzido in textos_traduzidos.items():
-            if texto_original in textos_original:
-                textos_original[texto_original].value = texto_traduzido
-
+        # Salva o arquivo traduzido
         nome_base, extensao = os.path.splitext(nome_arquivo)
         novo_nome = f"{nome_base}_pt.xlsx"
         workbook.save(novo_nome)
