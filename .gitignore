@@ -1,10 +1,10 @@
 # Ignorar arquivos
 cache_traducoes.json
-arquivo_entrada.csv
-arquivo_entrada.xlsx
+*.csv
+*.xlsx
 
 # Ignorar diretórios padrão de ambiente virtual do Python
-_pycache_/
+__pycache__/
 venv/
 env/
 

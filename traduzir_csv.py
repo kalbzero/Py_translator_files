@@ -3,10 +3,10 @@ import os
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from translate import Translator
+from googletrans import Translator
 from tqdm import tqdm
 
-tradutor = Translator(to_lang="pt")
+tradutor = Translator()
 cache_arquivo = 'cache_traducoes.json'
 
 # Carregar cache de traduções existente
@@ -20,8 +20,22 @@ def salvar_cache():
     with open(cache_arquivo, 'w', encoding='utf-8') as f:
         json.dump(cache_traducoes, f, ensure_ascii=False, indent=4)
 
+def is_number(texto):
+    # Remove todos os pontos, vírgulas e traços
+    texto_limpo = texto.replace('.', '').replace(',', '').replace('-', '')
+    return texto_limpo.isdigit()
+
+
+def is_url(texto):
+    return texto.lower().startswith("http")
+
 def traduzir_texto(texto):
     texto_strip = texto.strip()
+    
+    # Verificar se é um número ou um link
+    if is_number(texto_strip) or is_url(texto_strip):
+        return texto_strip
+    
     if texto_strip in cache_traducoes:
         return cache_traducoes[texto_strip]
     
@@ -29,7 +43,7 @@ def traduzir_texto(texto):
     max_tentativas = 5
     while tentativas < max_tentativas:
         try:
-            traducao = tradutor.translate(texto)
+            traducao = tradutor.translate(texto, src='es', dest='pt').text
             cache_traducoes[texto_strip] = traducao
             return traducao
         except Exception as e:
@@ -46,7 +60,7 @@ def traduzir_arquivo(nome_arquivo):
     print(f"Iniciando tradução do arquivo: {nome_arquivo}")
     
     try:
-        with open(nome_arquivo, 'r', encoding='utf-8') as arquivo:
+        with open(nome_arquivo, 'r', encoding='utf-8-sig') as arquivo:
             leitor = csv.reader(arquivo, delimiter=';')
             linhas = list(leitor)
         
@@ -63,13 +77,17 @@ def traduzir_arquivo(nome_arquivo):
         for i, linha in enumerate(linhas):
             for j, celula in enumerate(linha):
                 if celula.strip():
-                    linhas[i][j] = textos_traduzidos[indice_traduzido]
-                    indice_traduzido += 1
+                    # Verifica novamente se é um número ou um link para não alterar o original
+                    if is_number(celula.strip()) or is_url(celula.strip()):
+                        linhas[i][j] = celula
+                    else:
+                        linhas[i][j] = textos_traduzidos[indice_traduzido]
+                        indice_traduzido += 1
         
         nome_base, extensao = os.path.splitext(nome_arquivo)
         novo_nome = f"{nome_base}_pt{extensao}"
         
-        with open(novo_nome, 'w', newline='', encoding='utf-8') as arquivo:
+        with open(novo_nome, 'w', newline='', encoding='utf-8-sig') as arquivo:
             escritor = csv.writer(arquivo, delimiter=';')
             escritor.writerows(linhas)
         
@@ -84,7 +102,7 @@ def traduzir_arquivo(nome_arquivo):
         nome_base, extensao = os.path.splitext(nome_arquivo)
         novo_nome = f"{nome_base}_parcial_pt{extensao}"
         
-        with open(novo_nome, 'w', newline='', encoding='utf-8') as arquivo:
+        with open(novo_nome, 'w', newline='', encoding='utf-8-sig') as arquivo:
             escritor = csv.writer(arquivo, delimiter=';')
             escritor.writerows(linhas)
         
